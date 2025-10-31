@@ -1,0 +1,26 @@
+
+tmp/
+venv/
+.idea/
+.venv/
+#Python#
+########
+*.pyc
+**/.idea
+**/.pytest_cache
+**/__pycache__
+# Packages #
+############
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+# Logs and databases #
+######################
+*.log
+*.sql
+*.sqlite
