@@ -8,15 +8,11 @@ from tqdm import tqdm
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# =========================================================
-# 1 Config
-# =========================================================
 csv_path = "boat_dataset_3_class1.csv"
 best_model_path = "best_photo_type_classifier1.pth"
 max_epochs = 25
-# =========================================================
-# 1️⃣ Dataset
-# =========================================================
+
+
 class BoatPhotoDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.df = pd.read_csv(csv_file)
@@ -35,9 +31,7 @@ class BoatPhotoDataset(Dataset):
         label = self.classes.index(row["photo_type"])
         return img, torch.tensor(label)
 
-# =========================================================
-# 2️⃣ Model
-# =========================================================
+
 class PhotoTypeClassifier(nn.Module):
     def __init__(self, num_classes=3):
         super().__init__()
@@ -48,9 +42,6 @@ class PhotoTypeClassifier(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
-# =========================================================
-# 3️⃣ Setup
-# =========================================================
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -75,10 +66,6 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 best_val_loss = float("inf")
 
-
-# =========================================================
-# 4️⃣ Training Loop
-# =========================================================
 
 
 for epoch in range(max_epochs):

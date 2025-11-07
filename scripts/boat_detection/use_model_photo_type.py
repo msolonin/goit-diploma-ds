@@ -21,9 +21,7 @@ class PhotoTypeClassifier(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
-# =========================================================
-# Load model
-# =========================================================
+
 model_path = "best_photo_type_classifier.pth"
 class_names = ["boat", "in", "out"]  # must match training order!
 
@@ -34,10 +32,6 @@ model.load_state_dict(torch.load(model_path, map_location=device))
 model.to(device)
 model.eval()
 
-
-# =========================================================
-# Image preprocessing
-# =========================================================
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -47,15 +41,10 @@ transform = transforms.Compose([
 img = Image.open(image_path).convert("RGB")
 img_tensor = transform(img).unsqueeze(0).to(device)  # add batch dimension
 
-# =========================================================
-# Predict
-# =========================================================
 with torch.no_grad():
     logits = model(img_tensor)
     probs = F.softmax(logits, dim=1)[0]
-# =========================================================
-# Output
-# =========================================================
+
 pred_idx = torch.argmax(probs).item()
 pred_class = class_names[pred_idx]
 

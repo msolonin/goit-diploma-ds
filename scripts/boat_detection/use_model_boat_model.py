@@ -9,9 +9,7 @@ import pandas as pd
 image_path =  "/home/msolonin/Desktop/YachtDatasets/scrapper/images_SEAL_output/Hallberg-Rassy 50/b568c7febb97_out.jpg" 
 
 
-# =========================================================
-# 1️⃣ Model Definition
-# =========================================================
+
 class BoatModelClassifier(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -22,28 +20,18 @@ class BoatModelClassifier(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
-
-
-
-# =========================================================
-# 2️⃣ Config
-# =========================================================
 model_type = "seal"  # or "seal"
 best_model_path = f"best_boat_model_{model_type}.pth"
 csv_path = "boat_dataset_3_class1.csv"
 
-# =========================================================
-# 3️⃣ Load Classes (from training data)
-# =========================================================
+
 df = pd.read_csv(csv_path)
 df = df[(df["boat_type"] == model_type) & (df["photo_type"].isin(["out", "boat"]))]
 
 classes = sorted(df["boat_model"].unique().tolist())
 print(f"Loaded {len(classes)} boat model classes for type '{model_type}'")
 
-# =========================================================
-# 4️⃣ Load Model
-# =========================================================
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = BoatModelClassifier(num_classes=len(classes))
@@ -51,17 +39,11 @@ model.load_state_dict(torch.load(best_model_path, map_location=device))
 model.to(device)
 model.eval()
 
-# =========================================================
-# 5️⃣ Image Transform
-# =========================================================
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
 ])
 
-# =========================================================
-# 6️⃣ Predict
-# =========================================================
 img = Image.open(image_path).convert("RGB")
 img_t = transform(img).unsqueeze(0).to(device)
 
