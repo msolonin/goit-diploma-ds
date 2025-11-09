@@ -3,6 +3,7 @@ tmp/
 venv/
 .idea/
 .venv/
+.spyproject/
 #Python#
 ########
 *.pyc
