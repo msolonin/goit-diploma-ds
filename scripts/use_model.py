@@ -56,8 +56,3 @@ def analyze_photo(image_path,  gradcam=False):
         # print(f"✅ Model name: {model_name} | {_p}")
         result["model_name"] = {"target": model_name, "percent": _p, "top": _}
     return result
-
-
-image_path =  "/home/msolonin/Desktop/YachtDatasets/scrapper/images_SEAL_output/Hallberg-Rassy 50/b568c7febb97_out.jpg" 
-t = analyze_photo(image_path, gradcam=True)
-print(t)
