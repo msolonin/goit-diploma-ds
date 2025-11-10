@@ -7,7 +7,7 @@ import torch.nn as nn
 from PIL import Image
 import pandas as pd
 
-from base.constants import PHOTO_TYPES, BOAT_TYPES, PHOTO_TYPES_ALL, BOAT_TYPE, PHOTO_TYPE, BOAT_MODEL, IMAGE_PATH
+from scripts.base.constants import PHOTO_TYPES, BOAT_TYPES, PHOTO_TYPES_ALL, BOAT_TYPE, PHOTO_TYPE, BOAT_MODEL, IMAGE_PATH
 
 # =========================================================
 # Model of Boat dataset and Clasifier [Model of boat]
