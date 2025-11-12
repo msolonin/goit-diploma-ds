@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
+import { generateTips, analyzePhotoData, hasUnrecognizedPhotos } from "../../utils/analysisUtils";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -31,8 +32,11 @@ export default function BoatUploader() {
   const [boatName, setBoatName] = useState("");
   const [description, setDescription] = useState("");
   const [previews, setPreviews] = useState([]);
+  const [tips, setTips] = useState([]);
+
 
   const LOCAL_STORAGE_KEY = "boatFiles";
+  const WINNER_BOAT = "winnerBoatInfo";
 
   useEffect(() => {
     // clear local storage on full page refresh
@@ -97,7 +101,7 @@ export default function BoatUploader() {
         const data = await response.json();
 
         if (data.status === "success") {
-          toast.success(`✅ Analyzed: ${file.name}`);
+          toast.success(`Analyzed: ${file.name}`);
           const fileResult = {
             filename: file.name,
             analysis: data.data,
@@ -105,11 +109,11 @@ export default function BoatUploader() {
           updatedResults.push(fileResult);
           updateLocalStorageAdd([fileResult]);
         } else {
-          toast.error(`❌ Failed: ${file.name}`);
+          toast.error(`Failed: ${file.name}`);
         }
       } catch (error) {
-        console.error("Error uploading file:", error);
-        toast.error(`❌ Error analyzing ${file.name}`);
+//         console.error("Error uploading file:", error);
+        toast.error(`Error analyzing ${file.name}`);
       }
     }
 
@@ -131,24 +135,93 @@ export default function BoatUploader() {
     toast.info(`🗑️ Removed ${fileToDelete.name}`);
   };
 
-  const handleAddFromLocalStorage = () => {
-    const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
-    if (storedData.length === 0) {
-      toast.error("No analyzed files in local storage!");
-      return;
-    }
-    console.log("Analysis data from localStorage:", storedData.map((f) => f.analysis));
-    setShowNextStep(true);
-  };
+    const handleAddFromLocalStorage = async () => {
+      const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+      if (storedData.length === 0) {
+        toast.error("No analyzed files in local storage!");
+        return;
+      }
 
-  const handleSubmit = () => {
-    if (results.length === 0) {
-      toast.error("No analysis results available!");
-      return;
-    }
-    console.log({ boatType, boatName, description, results });
-    toast.success("✅ Data submitted!");
-  };
+      setShowNextStep(true);
+      const newTips = generateTips();
+      setTips(newTips);
+
+      const analysisSummary = analyzePhotoData(storedData);
+//       console.log("Analysis summary:", analysisSummary);
+
+      if (analysisSummary.winner_model) {
+        const { model_type, model_name } = analysisSummary.winner_model;
+        try {
+          const endpoint =
+            model_type.toLowerCase() === "seal"
+              ? `http://localhost:8000/get_seal?model_name=${encodeURIComponent(model_name)}`
+              : `http://localhost:8000/get_motor?model_name=${encodeURIComponent(model_name)}`;
+
+          const response = await fetch(endpoint);
+          const data = await response.json();
+
+          if (data.status === "success" && data.data?.length > 0) {
+            const info = data.data[0];
+//             console.log("Winner model details:", info);
+
+            // Fill form fields
+            setBoatType(
+              info.boat_type?.toLowerCase().includes("sail")
+                ? "seal"
+                : "motor"
+            );
+            setBoatName(info.boat_name || model_name);
+            setDescription(info.boat_description || "");
+
+            // === Save winner info to localStorage ===
+            localStorage.setItem(
+              "winnerBoatInfo",
+              JSON.stringify({
+                model_type,
+                model_name,
+                boat_name: info.boat_name,
+                description: info.boat_description,
+                boat_type: info.boat_type,
+              })
+            );
+
+            toast.success(`Winner detected: ${info.boat_name}`);
+          } else {
+            toast.error("No detailed data found for winner model!");
+          }
+        } catch (err) {
+//           console.error("Error fetching model details:", err);
+          toast.error("Failed to fetch winner model details!");
+        }
+      } else {
+//         console.warn("No winner model found in analysis summary");
+        localStorage.removeItem("winnerBoatInfo");
+      }
+    };
+
+
+    const handleSubmit = () => {
+      const winnerData = JSON.parse(localStorage.getItem("winnerBoatInfo") || "null");
+      const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+
+      const hasUnrecognized = hasUnrecognizedPhotos(storedData);
+      if (winnerData && !hasUnrecognized) {
+        toast.success(`✅ Boat: "${winnerData.boat_name}" submitted`);
+      } else if (winnerData && hasUnrecognized) {
+        toast.error(
+          `Boat: "${winnerData.boat_name}" submitted, but unrecognized photo(s) present. Boat goes on moderation.`
+        );
+      } else {
+        toast.error("Boat goes on moderation");
+      }
+
+      setTimeout(() => {
+        localStorage.removeItem("winnerBoatInfo");
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        window.location.reload();
+      }, 3000);
+    };
+
 
   const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
 
@@ -240,6 +313,43 @@ export default function BoatUploader() {
               Add
             </Button>
           )}
+        {showNextStep && tips.length > 0 && (
+          <Box
+            sx={{
+              mb: 2,
+              p: 1.5,
+              borderRadius: 1,
+              backgroundColor: "#fafafa",
+              border: "1px solid #e0e0e0",
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                display: "block",
+                fontSize: 16,
+                fontWeight: 500,
+                color: "#555",
+                mb: 0.5,
+              }}
+            >
+              Tips:
+            </Typography>
+            {tips.map((tip, idx) => (
+              <Typography
+                key={idx}
+                sx={{
+                  color: tip.color,
+                  fontSize: 14,
+                  lineHeight: 1.4,
+                  mb: 0.3,
+                }}
+              >
+                {tip.text}
+              </Typography>
+            ))}
+          </Box>
+        )}
 
           {showNextStep && storedData.length > 0 && (
             <Box mt={3}>
@@ -249,8 +359,8 @@ export default function BoatUploader() {
                   value={boatType}
                   onChange={(e) => setBoatType(e.target.value)}
                 >
-                  <MenuItem value="motor">Motor</MenuItem>
-                  <MenuItem value="seal">Seal</MenuItem>
+                  <MenuItem value="motor">Motor Yacht</MenuItem>
+                  <MenuItem value="sail">Sailing yacht</MenuItem>
                 </Select>
               </FormControl>
 

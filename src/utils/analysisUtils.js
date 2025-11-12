@@ -1,7 +1,11 @@
 export const THRESHOLD = 90;
+export const MODEL_THRESHOLD = 65;
+export const PHOTO_TYPE_WEIGHTS = { boat: 1.0, out: 0.7, in: 0.3 };
+export const LOCAL_STORAGE_KEY = "boatFiles";
+
+
 
 export function parseAnalysisData() {
-  const LOCAL_STORAGE_KEY = "boatFiles";
   const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
 
   return storedData.map((item) => {
@@ -39,5 +43,118 @@ export function parseAnalysisData() {
       borderColor,
       debugFiles,
     };
+  });
+}
+
+export function generateTips() {
+  const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+
+  if (storedData.length === 0) return [];
+
+  const tips = [];
+  let hasBoat = false;
+  let hasIn = false;
+
+  for (const item of storedData) {
+    const filename = item.filename;
+    const photo = item.analysis?.photo_type;
+
+    if (photo) {
+      const type = photo.target;
+      const percent = photo.percent ?? 0;
+
+      if (percent < THRESHOLD) {
+        tips.push({
+          color: "red",
+          text: `Unrecognized photo type: ${filename}`,
+        });
+      }
+
+      if (type === "boat" && percent >= THRESHOLD) hasBoat = true;
+      if (type === "in" && percent >= THRESHOLD) hasIn = true;
+    }
+  }
+
+  if (!hasBoat) {
+    tips.push({
+      color: "red",
+      text: "Add photo with all boat",
+    });
+  }
+
+  if (!hasIn) {
+    tips.push({
+      color: "orange",
+      text: "Add interior photos",
+    });
+  }
+  return tips;
+}
+
+export function analyzePhotoData(data) {
+  const photoTypeCounter = {};
+  const modelScores = {};
+  const modelVotes = {};
+  const modelTypes = {};
+
+  data.forEach((res) => {
+    const photo = res.analysis?.photo_type;
+    const modelType = res.analysis?.model_type;
+    const modelName = res.analysis?.model_name;
+
+    if (!photo) return;
+    const photoType = photo.target;
+    photoTypeCounter[photoType] = (photoTypeCounter[photoType] || 0) + 1;
+
+    // Only "boat" or "out" contribute to model votes
+    if (
+      photoType !== "in" &&
+      modelName &&
+      modelName.percent >= MODEL_THRESHOLD
+    ) {
+      const mType = modelType ? modelType.target : null;
+      const mName = modelName.target;
+      const score = modelName.percent * (PHOTO_TYPE_WEIGHTS[photoType] || 1.0);
+
+      const key = `${mType}::${mName}`;
+      if (!modelScores[key]) modelScores[key] = [];
+      if (!modelVotes[key]) modelVotes[key] = [];
+      modelScores[key].push(score);
+      modelVotes[key].push(1);
+      modelTypes[key] = mType;
+    }
+  });
+
+  // Aggregate model scores
+  const finalSummary = Object.keys(modelScores).map((key) => {
+    const [mType, mName] = key.split("::");
+    const scores = modelScores[key];
+    const avgScore =
+      scores.reduce((a, b) => a + b, 0) / (scores.length || 1);
+    return {
+      model_type: mType,
+      model_name: mName,
+      avg_score: Number(avgScore.toFixed(2)),
+      votes: modelVotes[key].length,
+    };
+  });
+
+  const winner =
+    finalSummary.length > 0
+      ? finalSummary.reduce((a, b) => (a.avg_score > b.avg_score ? a : b))
+      : null;
+
+  return {
+    photo_type_counts: photoTypeCounter,
+    winner_model: winner,
+  };
+}
+
+
+export function hasUnrecognizedPhotos(data) {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  return data.some((item) => {
+    const photo = item.analysis?.photo_type;
+    return !photo || photo.percent < THRESHOLD;
   });
 }
