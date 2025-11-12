@@ -125,6 +125,23 @@ def get_motor(model_name: str = Query(..., description="Boat model name")):
     }
 
 
+@app.get("/get_names")
+def get_names(boat_type: str = Query(..., description="Type of boat: 'seal' or 'motor'"),
+              chars: str = Query(..., min_length=4, description="Starting characters of boat name (min 4)")):
+
+    chars_lower = chars.lower()
+    if boat_type.lower() == "seal":
+        df = seal_df
+    elif boat_type.lower() == "motor":
+        df = motor_df
+    else:
+        raise HTTPException(status_code=400, detail="Invalid boat_type. Must be 'seal' or 'motor'.")
+    matching_names = df[df["boat_name"].str.lower().str.startswith(chars_lower)]["boat_name"].tolist()
+    if not matching_names:
+        return {"status": "error", "message": f"No boat names found starting with '{chars}'"}
+    return {"status": "success", "boat_names": matching_names}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host=HOST, port=PORT)
