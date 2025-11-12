@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-
+import uuid
 import torch
 import torch.nn.functional as F
 import numpy as np
 import cv2
 import os
 from PIL import Image
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from scripts.base.utils import transform
 from scripts.base.constants import TOP, HEATMAP_FOLDER
 
 
 def use_base_model(device, model, classes, best_model_path, image_path, model_name="", gradcam=False):
+    debug_file = False
     model.load_state_dict(torch.load(best_model_path, map_location=device))
     model.to(device)
     model.eval()   
@@ -91,15 +92,11 @@ def use_base_model(device, model, classes, best_model_path, image_path, model_na
         os.makedirs(HEATMAP_FOLDER, exist_ok=True)
         base_name = os.path.basename(image_path)
         name, ext = os.path.splitext(base_name)
-        output_path = os.path.join(HEATMAP_FOLDER, f"{name}_{model_name}{ext}")
-        
+        new_base_name = uuid.uuid4().hex
+        debug_file = f"{new_base_name}{ext}"
+        output_path = os.path.join(HEATMAP_FOLDER, debug_file)
         Image.fromarray(overlay).save(output_path)
-
-        plt.imshow(overlay)
-        plt.axis("off")
-        plt.title(f"Grad-CAM: {pred_class.upper()}")
-        plt.show()
 
         print(f"\n✅ Grad-CAM saved: {output_path}")
 
-    return pred_class, pred_class_procent, top_results
+    return pred_class, pred_class_procent, top_results, debug_file

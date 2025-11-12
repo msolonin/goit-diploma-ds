@@ -23,6 +23,7 @@ DEFAULT_CSV_PATH = "./data/boat_pictures_dataset.csv"
 HEATMAP_FOLDER = "./heatmap"
 TOP = 5
 THRESHOLD = 90
+MODEL_THRESHOLD = 65
 
 HOST = "0.0.0.0"
 PORT = 8000
