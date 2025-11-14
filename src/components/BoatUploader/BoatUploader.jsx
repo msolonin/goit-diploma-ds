@@ -184,79 +184,120 @@ export default function BoatUploader() {
     toast.info(`Removed ${fileToDelete.name}`);
   };
 
-  const handleAddFromLocalStorage = async () => {
-    const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
-    if (!storedData || storedData.length === 0) {
-      toast.error("No analyzed files in local storage!");
-      return;
-    }
+    const handleAddFromLocalStorage = async () => {
+      const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+      if (!storedData || storedData.length === 0) {
+        toast.error("No analyzed files in local storage!");
+        return;
+      }
 
-    setShowNextStep(true);
-    setTips(generateTips());
+      setShowNextStep(true);
+      setTips(generateTips());
 
-    const analysisSummary = analyzePhotoData(storedData);
-    const detectedModels = storedData
-      .map(f => f.analysis?.model_name?.target) // <-- use .target here
-      .filter(Boolean);
-    const normalizedModels = detectedModels.map(name => String(name).trim().toLowerCase());
-    const uniqueModels = [...new Set(normalizedModels)];
+      const analysisSummary = analyzePhotoData(storedData);
 
-    if (uniqueModels.length > 1) {
-      setTips((prev) => [{ text: "Different types of boat recognized", color: "red" }, ...prev]);
-      const detectedTypes = storedData.map((f) => f.analysis?.model_type).filter(Boolean).map(t => t.toLowerCase());
-      const uniqueTypes = [...new Set(detectedTypes)];
-      if (uniqueTypes.length === 1) setBoatType(uniqueTypes[0].includes("seal") ? "seal" : "motor");
-      else setBoatType("");
-      setBoatName("");
-      setDescription("");
-      localStorage.removeItem(WINNER_BOAT);
-      return;
-    }
+      // Detect unique models
+      const detectedModels = storedData
+        .map(f => f.analysis?.model_name?.target)
+        .filter(Boolean);
+      const normalizedModels = detectedModels.map(name => String(name).trim().toLowerCase());
+      const uniqueModels = [...new Set(normalizedModels)];
 
-    if (analysisSummary?.winner_model) {
-      const { model_type, model_name } = analysisSummary.winner_model;
+      if (uniqueModels.length > 1) {
+        setTips(prev => [
+          { text: "Different types of boat recognized", color: "red" },
+          ...prev.filter(t => t.text !== "Add interior photos")
+        ]);
 
-      try {
-        const endpoint = model_type.toLowerCase().includes("seal")
-          ? `${API_BASE_URL}/get_seal?model_name=${encodeURIComponent(model_name)}`
-          : `${API_BASE_URL}/get_motor?model_name=${encodeURIComponent(model_name)}`;
+        // Detect unique types
+        const detectedTypes = storedData
+          .map(f => f.analysis?.model_type)
+          .filter(Boolean)
+          .map(t => t.toLowerCase());
+        const uniqueTypes = [...new Set(detectedTypes)];
 
-        const response = await fetch(endpoint);
-        const data = await response.json();
+        setBoatType(uniqueTypes.length === 1
+          ? uniqueTypes[0].includes("seal") ? "seal" : "motor"
+          : ""
+        );
+        setBoatName("");
+        setDescription("");
+        setYear("");
+        setPrice("");
+        setCurrency("EUR");
+        localStorage.removeItem(WINNER_BOAT);
+        return;
+      }
 
-        if (data?.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
-          const info = data.data[0];
-          const resolvedBoatType = (info.boat_type || model_type).toLowerCase().includes("sail") ? "seal" : "motor";
-          setBoatType(resolvedBoatType);
-          setBoatName(info.boat_name || model_name);
-          setDescription(info.boat_description || "");
-          localStorage.setItem(WINNER_BOAT, JSON.stringify({
-            model_type,
-            model_name,
-            boat_name: info.boat_name,
-            description: info.boat_description,
-            boat_type: info.boat_type
-          }));
-          toast.success(`Winner detected: ${info.boat_name}`);
-        } else {
-          setBoatType(model_type.toLowerCase().includes("seal") ? "seal" : "motor");
+      // Single winner model
+      if (analysisSummary?.winner_model) {
+        const { model_type, model_name } = analysisSummary.winner_model;
+
+        try {
+          const endpoint = model_type.toLowerCase().includes("seal")
+            ? `${API_BASE_URL}/get_seal?model_name=${encodeURIComponent(model_name)}`
+            : `${API_BASE_URL}/get_motor?model_name=${encodeURIComponent(model_name)}`;
+
+          const response = await fetch(endpoint);
+          const data = await response.json();
+
+          if (data?.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
+            const info = data.data[0];
+            const resolvedBoatType = (info.boat_type || model_type).toLowerCase().includes("sail") ? "seal" : "motor";
+
+            setBoatType(resolvedBoatType);
+            setBoatName(info.boat_name || model_name);
+            setDescription(info.boat_description || "");
+
+            // Auto-fill year, price, and currency
+            if (info.year) setYear(String(info.year));
+            else setYear("");
+            if (info.price_n) setPrice(String(info.price_n));
+            else setPrice("");
+            if (info.currency) setCurrency(info.currency);
+            else setCurrency("EUR");
+
+            localStorage.setItem(WINNER_BOAT, JSON.stringify({
+              model_type,
+              model_name,
+              boat_name: info.boat_name,
+              description: info.boat_description,
+              boat_type: info.boat_type,
+              year: info.year || null,
+              price_n: info.price_n || null,
+              currency: info.currency || null
+            }));
+
+            toast.success(`Winner detected: ${info.boat_name}`);
+          } else {
+            setBoatType(model_type.toLowerCase().includes("seal") ? "seal" : "motor");
+            setBoatName("");
+            setDescription("");
+            setYear("");
+            setPrice("");
+            setCurrency("EUR");
+            localStorage.removeItem(WINNER_BOAT);
+          }
+        } catch {
+          setBoatType("");
           setBoatName("");
           setDescription("");
+          setYear("");
+          setPrice("");
+          setCurrency("EUR");
           localStorage.removeItem(WINNER_BOAT);
         }
-      } catch {
+      } else {
         setBoatType("");
         setBoatName("");
         setDescription("");
+        setYear("");
+        setPrice("");
+        setCurrency("EUR");
         localStorage.removeItem(WINNER_BOAT);
       }
-    } else {
-      setBoatType("");
-      setBoatName("");
-      setDescription("");
-      localStorage.removeItem(WINNER_BOAT);
-    }
-  };
+    };
+
 
   /* Auto-calculate rent prices */
   useEffect(() => {
@@ -309,7 +350,7 @@ export default function BoatUploader() {
         <Box sx={{ maxWidth: 700, mx: "auto" }}>
           {/* Title + Debug Switch on same line */}
           <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-            <Typography variant="h4">Upload boat photo</Typography>
+            <Typography variant="h4">Upload photo:</Typography>
             <FormControlLabel
               control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />}
               label="Debug"
@@ -391,8 +432,7 @@ export default function BoatUploader() {
               {/* Description */}
               <TextField fullWidth label="Description" multiline rows={5} value={description} onChange={(e) => setDescription(e.target.value)} sx={{ mb: 2 }} />
 
-              {/* Divider and Year/Price */}
-              <Divider sx={{ my: 2 }} />
+              <Divider sx={{ my: 2 }}>Year / Price</Divider>
               <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <TextField
@@ -421,6 +461,7 @@ export default function BoatUploader() {
                         <Select value={currency} onChange={(e) => setCurrency(e.target.value)} sx={{ ml: 1, minWidth: 60 }}>
                           <MenuItem value="EUR">€</MenuItem>
                           <MenuItem value="USD">$</MenuItem>
+                          <MenuItem value="GBP">£</MenuItem>
                           <MenuItem value="UAH">₴</MenuItem>
                         </Select>
                       )
@@ -472,6 +513,7 @@ export default function BoatUploader() {
                   <Select value={currency} onChange={(e) => setCurrency(e.target.value)} fullWidth>
                     <MenuItem value="EUR">€</MenuItem>
                     <MenuItem value="USD">$</MenuItem>
+                    <MenuItem value="GBP">£</MenuItem>
                     <MenuItem value="UAH">₴</MenuItem>
                   </Select>
                 </Grid>
