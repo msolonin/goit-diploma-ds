@@ -158,3 +158,49 @@ export function hasUnrecognizedPhotos(data) {
     return !photo || photo.percent < THRESHOLD;
   });
 }
+
+
+export function getSeasonFromDates(fromDate, toDate) {
+  if (!fromDate || !toDate) return "mid";
+  const fromMonth = new Date(fromDate).getMonth() + 1;
+  const toMonth = new Date(toDate).getMonth() + 1;
+  const avgMonth = Math.round((fromMonth + toMonth) / 2);
+  if ([6, 7, 8].includes(avgMonth)) return "high";
+  if ([4, 5, 9, 10].includes(avgMonth)) return "mid";
+  return "low";
+}
+
+export function calculateRentPrice(basePrice, year, season) {
+  if (!basePrice || isNaN(basePrice)) return { dayPrice: 0, weekPrice: 0, monthPrice: 0 };
+  let seasonMultiplier = 1;
+  switch ((season || "mid").toLowerCase()) {
+    case "high":
+      seasonMultiplier = 1.3;
+      break;
+    case "mid":
+      seasonMultiplier = 1.1;
+      break;
+    case "low":
+      seasonMultiplier = 0.9;
+      break;
+    default:
+      seasonMultiplier = 1;
+  }
+
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - (year || currentYear);
+  let ageMultiplier = 1;
+  if (age <= 2) ageMultiplier = 1.2; // very new
+  else if (age <= 5) ageMultiplier = 1.1; // moderately new
+  else if (age <= 10) ageMultiplier = 1; // normal
+  else ageMultiplier = 0.85; // older
+
+
+  let dayPrice = basePrice * 0.01 * seasonMultiplier * ageMultiplier; // 1% of boat price per day
+  let weekPrice = dayPrice * 7 * 0.9; // 10% discount for week
+  let monthPrice = dayPrice * 30 * 0.8; // 20% discount for month
+  dayPrice = Math.round(dayPrice);
+  weekPrice = Math.round(weekPrice);
+  monthPrice = Math.round(monthPrice);
+  return { dayPrice, weekPrice, monthPrice };
+}

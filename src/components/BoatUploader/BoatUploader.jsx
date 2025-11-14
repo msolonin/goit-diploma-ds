@@ -1,6 +1,12 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { generateTips, analyzePhotoData, hasUnrecognizedPhotos } from "../../utils/analysisUtils";
+import {
+  generateTips,
+  analyzePhotoData,
+  hasUnrecognizedPhotos,
+  calculateRentPrice,
+  getSeasonFromDates
+} from "../../utils/analysisUtils";
 import { API_BASE_URL } from "../../config";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -19,12 +25,12 @@ import {
   Paper,
   Grid,
   IconButton,
-  Autocomplete
+  Autocomplete,
+  Divider
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DebugPanel from "./DebugPanel";
 
-// Utility debounce function
 function debounce(fn, delay) {
   let timeout;
   return (...args) => {
@@ -42,37 +48,50 @@ export default function BoatUploader() {
   const [boatType, setBoatType] = useState("motor");
   const [boatName, setBoatName] = useState("");
   const [description, setDescription] = useState("");
+  const [year, setYear] = useState("");
+  const [price, setPrice] = useState("");
+  const [currency, setCurrency] = useState("EUR");
+  const [rentFrom, setRentFrom] = useState("");
+  const [rentTo, setRentTo] = useState("");
+  const [rentPriceDay, setRentPriceDay] = useState("");
+  const [rentPriceWeek, setRentPriceWeek] = useState("");
+  const [rentPriceMonth, setRentPriceMonth] = useState("");
   const [previews, setPreviews] = useState([]);
   const [tips, setTips] = useState([]);
   const [nameOptions, setNameOptions] = useState([]);
-
   const LOCAL_STORAGE_KEY = "boatFiles";
   const WINNER_BOAT = "winnerBoatInfo";
+  const todayStr = new Date().toISOString().split("T")[0];
+  const maxYear = new Date().getFullYear();
+  const minYear = maxYear - 50;
 
-
-
+  /* Remove previous localStorage data on mount */
   useEffect(() => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
   }, []);
 
+  /* Cleanup object URLs */
   useEffect(() => {
-    return () => previews.forEach((p) => URL.revokeObjectURL(p.src));
+    return () => previews.forEach((p) => p.src && URL.revokeObjectURL(p.src));
   }, [previews]);
 
-  // Debounced API call for get_names
+  /* Fetch boat names debounced */
   const fetchNamesDebounced = useCallback(
     debounce(async (type, chars) => {
-      if (chars.length < 4) return setNameOptions([]);
+      if (!chars || chars.length < 4) {
+        setNameOptions([]);
+        return;
+      }
       try {
-        const response = await fetch(
+        const resp = await fetch(
           `${API_BASE_URL}/get_names?boat_type=${encodeURIComponent(type)}&chars=${encodeURIComponent(chars)}`
         );
-        const data = await response.json();
-        setNameOptions(data.status === "success" ? data.boat_names : []);
+        const data = await resp.json();
+        setNameOptions(data?.status === "success" ? data.boat_names || [] : []);
       } catch {
         setNameOptions([]);
       }
-    }, 500), // 500ms debounce
+    }, 500),
     []
   );
 
@@ -80,7 +99,7 @@ export default function BoatUploader() {
     fetchNamesDebounced(boatType, boatName);
   }, [boatType, boatName, fetchNamesDebounced]);
 
-  // --- Dropzone and analysis logic ---
+  /* LocalStorage helpers */
   const updateLocalStorageAdd = (newFiles) => {
     const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
     const merged = [...stored];
@@ -96,9 +115,10 @@ export default function BoatUploader() {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
   };
 
+  /* Dropzone */
   const onDrop = useCallback(
     (acceptedFiles) => {
-      if (acceptedFiles.length === 0) return;
+      if (!acceptedFiles || acceptedFiles.length === 0) return;
       setDropzoneFiles((prev) => [...prev, ...acceptedFiles]);
       const newPreviews = acceptedFiles.map((file) => ({ file, src: URL.createObjectURL(file) }));
       setPreviews((prev) => [...prev, ...newPreviews]);
@@ -110,9 +130,10 @@ export default function BoatUploader() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [] },
+    accept: { "image/*": [] }
   });
 
+  /* Analyze files */
   const analyzeFiles = async (filesToAnalyze) => {
     setLoadingFiles(true);
     const updatedResults = [...results];
@@ -125,14 +146,22 @@ export default function BoatUploader() {
       try {
         const response = await fetch(`${API_BASE_URL}/analyze_file`, {
           method: "POST",
-          body: formData,
+          body: formData
         });
         const data = await response.json();
-        if (data.status === "success") {
+
+        if (data?.status === "success") {
           toast.success(`Analyzed: ${file.name}`);
           const fileResult = { filename: file.name, analysis: data.data };
           updatedResults.push(fileResult);
           updateLocalStorageAdd([fileResult]);
+
+          // Add heatmap preview if available
+          if (data.data.heatmap_url) {
+            setPreviews((prev) => [...prev, { file, src: data.data.heatmap_url }]);
+          } else {
+            setPreviews((prev) => [...prev, { file, src: URL.createObjectURL(file) }]);
+          }
         } else {
           toast.error(`Failed: ${file.name}`);
         }
@@ -145,79 +174,150 @@ export default function BoatUploader() {
     setLoadingFiles(false);
   };
 
+  /* Delete file */
   const handleDeleteFile = (fileToDelete) => {
     const updatedPreviews = previews.filter((p) => p.file !== fileToDelete);
     setPreviews(updatedPreviews);
     setDropzoneFiles((prev) => prev.filter((f) => f !== fileToDelete));
-    setResults(results.filter((r) => r.filename !== fileToDelete.name));
+    setResults((prev) => prev.filter((r) => r.filename !== fileToDelete.name));
     updateLocalStorageDelete(fileToDelete.name);
+
     if (updatedPreviews.length === 0) setShowNextStep(false);
     toast.info(`Removed ${fileToDelete.name}`);
   };
 
+  /* Add from LocalStorage */
   const handleAddFromLocalStorage = async () => {
     const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
-    if (!storedData.length) {
+    if (!storedData || storedData.length === 0) {
       toast.error("No analyzed files in local storage!");
       return;
     }
+
+    // Autofill rent dates: today -> +1 month
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0];
+    const nextMonth = new Date(today);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    const nextMonthStr = nextMonth.toISOString().split("T")[0];
+
+    setRentFrom(todayStr);
+    setRentTo(nextMonthStr);
+
     setShowNextStep(true);
     setTips(generateTips());
-    const analysisSummary = analyzePhotoData(storedData);
 
-    if (analysisSummary.winner_model) {
+    // Populate previews with heatmaps from storedData
+    const storedPreviews = storedData.map((f) => ({
+      file: { name: f.filename },
+      src: f.analysis?.heatmap_url || ""
+    }));
+    setPreviews(storedPreviews);
+
+    const analysisSummary = analyzePhotoData(storedData);
+    const detectedModels = storedData.map((f) => f.analysis?.model_name).filter(Boolean);
+    const uniqueModels = [...new Set(detectedModels)];
+
+    if (uniqueModels.length > 1) {
+      setTips((prev) => [{ text: "Different types of boat recognized", color: "red" }, ...prev]);
+      const detectedTypes = storedData.map((f) => f.analysis?.model_type).filter(Boolean).map(t => t.toLowerCase());
+      const uniqueTypes = [...new Set(detectedTypes)];
+      if (uniqueTypes.length === 1) setBoatType(uniqueTypes[0].includes("seal") ? "seal" : "motor");
+      else setBoatType("");
+      setBoatName("");
+      setDescription("");
+      localStorage.removeItem(WINNER_BOAT);
+      return;
+    }
+
+    if (analysisSummary?.winner_model) {
       const { model_type, model_name } = analysisSummary.winner_model;
+
       try {
-        const endpoint =
-          model_type.toLowerCase() === "seal"
-            ? `${API_BASE_URL}/get_seal?model_name=${encodeURIComponent(model_name)}`
-            : `${API_BASE_URL}/get_motor?model_name=${encodeURIComponent(model_name)}`;
+        const endpoint = model_type.toLowerCase().includes("seal")
+          ? `${API_BASE_URL}/get_seal?model_name=${encodeURIComponent(model_name)}`
+          : `${API_BASE_URL}/get_motor?model_name=${encodeURIComponent(model_name)}`;
 
         const response = await fetch(endpoint);
         const data = await response.json();
-        if (data.status === "success" && data.data?.length > 0) {
+
+        if (data?.status === "success" && Array.isArray(data.data) && data.data.length > 0) {
           const info = data.data[0];
-          setBoatType(info.boat_type?.toLowerCase().includes("sail") ? "seal" : "motor");
+          const resolvedBoatType = (info.boat_type || model_type).toLowerCase().includes("sail") ? "seal" : "motor";
+          setBoatType(resolvedBoatType);
           setBoatName(info.boat_name || model_name);
           setDescription(info.boat_description || "");
-          localStorage.setItem(
-            "winnerBoatInfo",
-            JSON.stringify({ model_type, model_name, boat_name: info.boat_name, description: info.boat_description, boat_type: info.boat_type })
-          );
+          localStorage.setItem(WINNER_BOAT, JSON.stringify({
+            model_type,
+            model_name,
+            boat_name: info.boat_name,
+            description: info.boat_description,
+            boat_type: info.boat_type
+          }));
           toast.success(`Winner detected: ${info.boat_name}`);
-        } else toast.error("No detailed data found for winner model!");
+        } else {
+          setBoatType(model_type.toLowerCase().includes("seal") ? "seal" : "motor");
+          setBoatName("");
+          setDescription("");
+          localStorage.removeItem(WINNER_BOAT);
+        }
       } catch {
-        toast.error("Failed to fetch winner model details!");
+        setBoatType("");
+        setBoatName("");
+        setDescription("");
+        localStorage.removeItem(WINNER_BOAT);
       }
-    } else localStorage.removeItem("winnerBoatInfo");
+    } else {
+      setBoatType("");
+      setBoatName("");
+      setDescription("");
+      localStorage.removeItem(WINNER_BOAT);
+    }
   };
 
-    const handleSubmit = () => {
-      const winnerData = JSON.parse(localStorage.getItem("winnerBoatInfo") || "null");
-      const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
-      const hasUnrecognized = hasUnrecognizedPhotos(storedData);
+  /* Auto-calculate rent prices */
+  useEffect(() => {
+    if (year && price && rentFrom && rentTo) {
+      const season = getSeasonFromDates(rentFrom, rentTo);
+      const { dayPrice, weekPrice, monthPrice } = calculateRentPrice(
+        Number(price),
+        Number(year),
+        season
+      );
+      setRentPriceDay(dayPrice);
+      setRentPriceWeek(weekPrice);
+      setRentPriceMonth(monthPrice);
+    }
+  }, [year, price, rentFrom, rentTo]);
 
-      // --- Validation: Boat name mismatch ---
-      if (winnerData && boatName.trim() && boatName.trim().toLowerCase() !== winnerData.boat_name.trim().toLowerCase()) {
-        toast.error(`Boat "${boatName}" from autocomplete not match with recognized: "${winnerData.boat_name}". Boat goes on moderation.`);
-      }
-      else if (winnerData && !hasUnrecognized) {
-        toast.success(`✅ Boat: "${winnerData.boat_name}" submitted`);
-      }
-      else if (winnerData && hasUnrecognized) {
-        toast.error(`Boat: "${winnerData.boat_name}" submitted, but unrecognized photo(s) present. Boat goes on moderation.`);
-      }
-      else {
-        toast.error("Boat goes on moderation");
-      }
+  /* Submit */
+  const handleSubmit = () => {
+    const winnerData = JSON.parse(localStorage.getItem(WINNER_BOAT) || "null");
+    const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
+    const hasUnrecognized = hasUnrecognizedPhotos(storedData);
 
-  setTimeout(() => {
-    localStorage.removeItem("winnerBoatInfo");
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    window.location.reload();
-  }, 3000);
-};
+    const fromDate = new Date(rentFrom);
+    const toDate = new Date(rentTo);
+    const diffDays = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24));
 
+    const boatModel = winnerData?.boat_name || boatName || "Unknown";
+
+    if (winnerData && boatName && winnerData.boat_name && boatName.trim().toLowerCase() !== winnerData.boat_name.trim().toLowerCase()) {
+      toast.error(`Boat "${boatName}" does not match recognized. Goes on moderation.`);
+    } else if (winnerData && !hasUnrecognized) {
+      toast.success(`Boat ${boatModel} submitted. Rent period: ${diffDays} day(s)`);
+    } else if (winnerData && hasUnrecognized) {
+      toast.error(`Boat submitted: ${boatModel}, but unrecognized photos present. Goes on moderation.`);
+    } else {
+      toast.error("Boat goes on moderation");
+    }
+
+    setTimeout(() => {
+      localStorage.removeItem(WINNER_BOAT);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      window.location.reload();
+    }, 3000);
+  };
 
   const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
 
@@ -226,11 +326,14 @@ export default function BoatUploader() {
       <Grid item xs={12} md={debug ? 8 : 12}>
         <Box sx={{ maxWidth: 700, mx: "auto" }}>
           <Typography variant="h4" gutterBottom>Boat Uploader</Typography>
-          <FormControlLabel control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />} label="Debug" />
+          <FormControlLabel
+            control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />}
+            label="Debug"
+          />
 
           <Paper {...getRootProps()} sx={{ border: "2px dashed #ccc", p: 4, textAlign: "center", mb: 2, backgroundColor: isDragActive ? "#f0f0f0" : "inherit", cursor: "pointer" }}>
             <input {...getInputProps()} />
-            <Typography>{isDragActive ? "Drop the files here..." : "Drag & drop files here, or click to select"}</Typography>
+            <Typography>{isDragActive ? "Drop the files here..." : "Drag & drop files or click to select"}</Typography>
 
             {previews.length > 0 && (
               <Grid container spacing={1} sx={{ mt: 2 }}>
@@ -247,7 +350,10 @@ export default function BoatUploader() {
           </Paper>
 
           {loadingFiles && <CircularProgress />}
-          {previews.length > 0 && !showNextStep && <Button variant="contained" color="primary" onClick={handleAddFromLocalStorage} sx={{ mb: 2 }}>Add</Button>}
+
+          {previews.length > 0 && !showNextStep && (
+            <Button variant="contained" color="primary" onClick={handleAddFromLocalStorage} sx={{ mb: 2 }}>Add</Button>
+          )}
 
           {showNextStep && tips.length > 0 && (
             <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, backgroundColor: "#fafafa", border: "1px solid #e0e0e0" }}>
@@ -258,50 +364,115 @@ export default function BoatUploader() {
 
           {showNextStep && storedData.length > 0 && (
             <Box mt={3}>
+              {/* Boat Type */}
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Boat Type</InputLabel>
-                <Select value={boatType} onChange={(e) => setBoatType(e.target.value)}>
+                <Select value={boatType} onChange={(e) => setBoatType(e.target.value)} label="Boat Type">
+                  <MenuItem value="">Select type</MenuItem>
                   <MenuItem value="motor">Motor Yacht</MenuItem>
-                  <MenuItem value="seal">Sailing yacht</MenuItem>
+                  <MenuItem value="seal">Sailing Yacht</MenuItem>
                 </Select>
               </FormControl>
 
-                <Autocomplete
-                  freeSolo
-                  options={nameOptions}
-                  inputValue={boatName}
-                  onInputChange={(event, newInputValue) => setBoatName(newInputValue)}
-                  onChange={async (event, selectedValue) => {
-                    if (!selectedValue) return;
+              {/* Boat Name */}
+              <Autocomplete
+                freeSolo
+                options={nameOptions}
+                inputValue={boatName}
+                onInputChange={(event, newInputValue) => setBoatName(newInputValue)}
+                renderInput={(params) => <TextField {...params} label="Boat Name" fullWidth sx={{ mb: 2 }} />}
+              />
 
-                    setBoatName(selectedValue);
-
-                    try {
-                      const endpoint =
-                        boatType === "seal"
-                          ? `${API_BASE_URL}/get_seal?model_name=${encodeURIComponent(selectedValue)}`
-                          : `${API_BASE_URL}/get_motor?model_name=${encodeURIComponent(selectedValue)}`;
-
-                      const response = await fetch(endpoint);
-                      const data = await response.json();
-
-                      if (data.status === "success" && data.data?.length > 0) {
-                        const info = data.data[0];
-                        setDescription(info.boat_description || "");
-                      } else {
-                        setDescription("");
-                      }
-                    } catch (err) {
-                      console.error("Failed to fetch model description:", err);
-                      setDescription("");
-                    }
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Boat Name" fullWidth sx={{ mb: 2 }} />}
-                />
-
-
+              {/* Description */}
               <TextField fullWidth label="Description" multiline rows={5} value={description} onChange={(e) => setDescription(e.target.value)} sx={{ mb: 2 }} />
-              <Button variant="contained" color="primary" onClick={handleSubmit}>Submit</Button>
+
+              {/* Year / Price */}
+              <Divider sx={{ my: 2 }} />
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    label="Year"
+                    type="number"
+                    fullWidth
+                    value={year}
+                    onChange={(e) => {
+                      let val = Number(e.target.value);
+                      if (val > maxYear) val = maxYear;
+                      if (val < minYear) val = minYear;
+                      setYear(val);
+                    }}
+                    inputProps={{ min: minYear, max: maxYear }}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="Price"
+                    type="number"
+                    fullWidth
+                    value={price}
+                    onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
+                    InputProps={{
+                      endAdornment: (
+                        <Select value={currency} onChange={(e) => setCurrency(e.target.value)} sx={{ ml: 1, minWidth: 60 }}>
+                          <MenuItem value="EUR">€</MenuItem>
+                          <MenuItem value="USD">$</MenuItem>
+                          <MenuItem value="UAH">₴</MenuItem>
+                        </Select>
+                      )
+                    }}
+                  />
+                </Grid>
+              </Grid>
+
+              {/* Rent Period */}
+              <Divider sx={{ my: 2 }}>Rent Period</Divider>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    label="From"
+                    type="date"
+                    fullWidth
+                    value={rentFrom}
+                    onChange={(e) => setRentFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ min: todayStr }}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="To"
+                    type="date"
+                    fullWidth
+                    value={rentTo}
+                    onChange={(e) => {
+                      if (rentFrom && e.target.value <= rentFrom) {
+                        toast.error("To date must be after From date");
+                        return;
+                      }
+                      setRentTo(e.target.value);
+                    }}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ min: rentFrom || todayStr }}
+                  />
+                </Grid>
+              </Grid>
+
+              {/* Rent Price */}
+              <Divider sx={{ my: 2 }}>Rent price of boat</Divider>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={3}><TextField label="1 Day" type="number" fullWidth value={rentPriceDay} onChange={(e) => setRentPriceDay(e.target.value)} /></Grid>
+                <Grid item xs={3}><TextField label="1 Week" type="number" fullWidth value={rentPriceWeek} onChange={(e) => setRentPriceWeek(e.target.value)} /></Grid>
+                <Grid item xs={3}><TextField label="1 Month" type="number" fullWidth value={rentPriceMonth} onChange={(e) => setRentPriceMonth(e.target.value)} /></Grid>
+                <Grid item xs={3}>
+                  <Select value={currency} onChange={(e) => setCurrency(e.target.value)} fullWidth>
+                    <MenuItem value="EUR">€</MenuItem>
+                    <MenuItem value="USD">$</MenuItem>
+                    <MenuItem value="UAH">₴</MenuItem>
+                  </Select>
+                </Grid>
+              </Grid>
+
+              <Button variant="contained" color="primary" onClick={handleSubmit} sx={{ mt: 2 }}>Submit</Button>
             </Box>
           )}
         </Box>
