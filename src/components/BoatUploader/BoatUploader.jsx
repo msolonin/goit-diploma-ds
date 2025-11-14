@@ -54,7 +54,7 @@ export default function BoatUploader() {
   const [price, setPrice] = useState("");
   const [currency, setCurrency] = useState("EUR");
 
-  // Today's date and default To date (+1 month)
+  // Default dates: today → today + 1 month
   const todayDate = new Date();
   const todayStr = todayDate.toISOString().split("T")[0];
   const defaultToDate = new Date(todayDate);
@@ -195,8 +195,11 @@ export default function BoatUploader() {
     setTips(generateTips());
 
     const analysisSummary = analyzePhotoData(storedData);
-    const detectedModels = storedData.map((f) => f.analysis?.model_name).filter(Boolean);
-    const uniqueModels = [...new Set(detectedModels)];
+    const detectedModels = storedData
+      .map(f => f.analysis?.model_name?.target) // <-- use .target here
+      .filter(Boolean);
+    const normalizedModels = detectedModels.map(name => String(name).trim().toLowerCase());
+    const uniqueModels = [...new Set(normalizedModels)];
 
     if (uniqueModels.length > 1) {
       setTips((prev) => [{ text: "Different types of boat recognized", color: "red" }, ...prev]);
@@ -304,12 +307,16 @@ export default function BoatUploader() {
     <Grid container spacing={3} sx={{ mt: 4 }}>
       <Grid item xs={12} md={debug ? 8 : 12}>
         <Box sx={{ maxWidth: 700, mx: "auto" }}>
-          <Typography variant="h4" gutterBottom>Upload your boat photo</Typography>
-          <FormControlLabel
-            control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />}
-            label="Debug"
-          />
-
+          {/* Title + Debug Switch on same line */}
+          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+            <Typography variant="h4">Upload boat photo</Typography>
+            <FormControlLabel
+              control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />}
+              label="Debug"
+              sx={{ ml: 2.5 }}
+            />
+          </Box>
+          {/* Dropzone */}
           <Paper {...getRootProps()} sx={{ border: "2px dashed #ccc", p: 4, textAlign: "center", mb: 2, backgroundColor: isDragActive ? "#f0f0f0" : "inherit", cursor: "pointer" }}>
             <input {...getInputProps()} />
             <Typography>{isDragActive ? "Drop the files here..." : "Drag & drop files or click to select"}</Typography>
@@ -334,43 +341,34 @@ export default function BoatUploader() {
             <Button variant="contained" color="primary" onClick={handleAddFromLocalStorage} sx={{ mb: 2 }}>Add</Button>
           )}
 
-        {showNextStep && tips.length > 0 && (
-          <Box
-            sx={{
-              position: "relative",
-              mb: 2,
-              p: 2,
-              borderRadius: 1,
-              border: "1px solid #e0e0e0",
-              backgroundColor: "#fafafa",
-              "&:before": {
-                content: '"Tips"',
-                position: "absolute",
-                top: -10,
-                left: 12,
-                backgroundColor: "#fafafa",
-                padding: "0 4px",
-                fontSize: 12,
-                color: "#555",
-                fontWeight: 500,
-              },
-            }}
-          >
-            {tips.map((tip, idx) => (
-              <Typography
-                key={idx}
-                sx={{ color: tip.color || "#555", fontSize: 14, lineHeight: 1.4, mb: 0.3 }}
-              >
-                {tip.text}
-              </Typography>
-            ))}
-          </Box>
-        )}
-
-
-
+          {/* Next Step Form */}
           {showNextStep && storedData.length > 0 && (
             <Box mt={3}>
+              {/* Tips as floating label */}
+              {tips.length > 0 && (
+                <Box sx={{ position: "relative", mb: 2 }}>
+                  <Box sx={{
+                    position: "absolute",
+                    top: -10,
+                    left: 12,
+                    px: 1,
+                    backgroundColor: "#fff",
+                    color: "#555",
+                    fontSize: 12,
+                    fontWeight: 500,
+                  }}>
+                    Tips
+                  </Box>
+                  <Box sx={{ border: "1px solid #ccc", borderRadius: 1, p: 1.5, minHeight: 50 }}>
+                    {tips.map((tip, idx) => (
+                      <Typography key={idx} sx={{ color: tip.color || "black", fontSize: 14, lineHeight: 1.4 }}>
+                        {tip.text}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
               {/* Boat Type */}
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Boat Type</InputLabel>
