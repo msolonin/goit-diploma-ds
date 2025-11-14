@@ -31,6 +31,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import DebugPanel from "./DebugPanel";
 
+/* Debounce helper */
 function debounce(fn, delay) {
   let timeout;
   return (...args) => {
@@ -45,37 +46,47 @@ export default function BoatUploader() {
   const [results, setResults] = useState([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [showNextStep, setShowNextStep] = useState(false);
+
   const [boatType, setBoatType] = useState("motor");
   const [boatName, setBoatName] = useState("");
   const [description, setDescription] = useState("");
   const [year, setYear] = useState("");
   const [price, setPrice] = useState("");
   const [currency, setCurrency] = useState("EUR");
-  const [rentFrom, setRentFrom] = useState("");
-  const [rentTo, setRentTo] = useState("");
+
+  // Today's date and default To date (+1 month)
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split("T")[0];
+  const defaultToDate = new Date(todayDate);
+  defaultToDate.setMonth(defaultToDate.getMonth() + 1);
+  const defaultToStr = defaultToDate.toISOString().split("T")[0];
+
+  const [rentFrom, setRentFrom] = useState(todayStr);
+  const [rentTo, setRentTo] = useState(defaultToStr);
+
   const [rentPriceDay, setRentPriceDay] = useState("");
   const [rentPriceWeek, setRentPriceWeek] = useState("");
   const [rentPriceMonth, setRentPriceMonth] = useState("");
+
   const [previews, setPreviews] = useState([]);
   const [tips, setTips] = useState([]);
   const [nameOptions, setNameOptions] = useState([]);
+
   const LOCAL_STORAGE_KEY = "boatFiles";
   const WINNER_BOAT = "winnerBoatInfo";
-  const todayStr = new Date().toISOString().split("T")[0];
+
   const maxYear = new Date().getFullYear();
   const minYear = maxYear - 50;
 
-  /* Remove previous localStorage data on mount */
+  // Clear previous local storage files
   useEffect(() => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
   }, []);
 
-  /* Cleanup object URLs */
   useEffect(() => {
-    return () => previews.forEach((p) => p.src && URL.revokeObjectURL(p.src));
+    return () => previews.forEach((p) => URL.revokeObjectURL(p.src));
   }, [previews]);
 
-  /* Fetch boat names debounced */
   const fetchNamesDebounced = useCallback(
     debounce(async (type, chars) => {
       if (!chars || chars.length < 4) {
@@ -99,7 +110,6 @@ export default function BoatUploader() {
     fetchNamesDebounced(boatType, boatName);
   }, [boatType, boatName, fetchNamesDebounced]);
 
-  /* LocalStorage helpers */
   const updateLocalStorageAdd = (newFiles) => {
     const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
     const merged = [...stored];
@@ -115,7 +125,6 @@ export default function BoatUploader() {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
   };
 
-  /* Dropzone */
   const onDrop = useCallback(
     (acceptedFiles) => {
       if (!acceptedFiles || acceptedFiles.length === 0) return;
@@ -133,7 +142,6 @@ export default function BoatUploader() {
     accept: { "image/*": [] }
   });
 
-  /* Analyze files */
   const analyzeFiles = async (filesToAnalyze) => {
     setLoadingFiles(true);
     const updatedResults = [...results];
@@ -155,16 +163,7 @@ export default function BoatUploader() {
           const fileResult = { filename: file.name, analysis: data.data };
           updatedResults.push(fileResult);
           updateLocalStorageAdd([fileResult]);
-
-          // Add heatmap preview if available
-          if (data.data.heatmap_url) {
-            setPreviews((prev) => [...prev, { file, src: data.data.heatmap_url }]);
-          } else {
-            setPreviews((prev) => [...prev, { file, src: URL.createObjectURL(file) }]);
-          }
-        } else {
-          toast.error(`Failed: ${file.name}`);
-        }
+        } else toast.error(`Failed: ${file.name}`);
       } catch {
         toast.error(`Error analyzing ${file.name}`);
       }
@@ -174,7 +173,6 @@ export default function BoatUploader() {
     setLoadingFiles(false);
   };
 
-  /* Delete file */
   const handleDeleteFile = (fileToDelete) => {
     const updatedPreviews = previews.filter((p) => p.file !== fileToDelete);
     setPreviews(updatedPreviews);
@@ -186,7 +184,6 @@ export default function BoatUploader() {
     toast.info(`Removed ${fileToDelete.name}`);
   };
 
-  /* Add from LocalStorage */
   const handleAddFromLocalStorage = async () => {
     const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
     if (!storedData || storedData.length === 0) {
@@ -194,25 +191,8 @@ export default function BoatUploader() {
       return;
     }
 
-    // Autofill rent dates: today -> +1 month
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0];
-    const nextMonth = new Date(today);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    const nextMonthStr = nextMonth.toISOString().split("T")[0];
-
-    setRentFrom(todayStr);
-    setRentTo(nextMonthStr);
-
     setShowNextStep(true);
     setTips(generateTips());
-
-    // Populate previews with heatmaps from storedData
-    const storedPreviews = storedData.map((f) => ({
-      file: { name: f.filename },
-      src: f.analysis?.heatmap_url || ""
-    }));
-    setPreviews(storedPreviews);
 
     const analysisSummary = analyzePhotoData(storedData);
     const detectedModels = storedData.map((f) => f.analysis?.model_name).filter(Boolean);
@@ -290,7 +270,6 @@ export default function BoatUploader() {
     }
   }, [year, price, rentFrom, rentTo]);
 
-  /* Submit */
   const handleSubmit = () => {
     const winnerData = JSON.parse(localStorage.getItem(WINNER_BOAT) || "null");
     const storedData = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
@@ -325,7 +304,7 @@ export default function BoatUploader() {
     <Grid container spacing={3} sx={{ mt: 4 }}>
       <Grid item xs={12} md={debug ? 8 : 12}>
         <Box sx={{ maxWidth: 700, mx: "auto" }}>
-          <Typography variant="h4" gutterBottom>Boat Uploader</Typography>
+          <Typography variant="h4" gutterBottom>Upload your boat photo</Typography>
           <FormControlLabel
             control={<Switch checked={debug} onChange={(e) => setDebug(e.target.checked)} />}
             label="Debug"
@@ -355,12 +334,40 @@ export default function BoatUploader() {
             <Button variant="contained" color="primary" onClick={handleAddFromLocalStorage} sx={{ mb: 2 }}>Add</Button>
           )}
 
-          {showNextStep && tips.length > 0 && (
-            <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, backgroundColor: "#fafafa", border: "1px solid #e0e0e0" }}>
-              <Typography variant="caption" sx={{ display: "block", fontSize: 16, fontWeight: 500, color: "#555", mb: 0.5 }}>Tips:</Typography>
-              {tips.map((tip, idx) => <Typography key={idx} sx={{ color: tip.color, fontSize: 14, lineHeight: 1.4, mb: 0.3 }}>{tip.text}</Typography>)}
-            </Box>
-          )}
+        {showNextStep && tips.length > 0 && (
+          <Box
+            sx={{
+              position: "relative",
+              mb: 2,
+              p: 2,
+              borderRadius: 1,
+              border: "1px solid #e0e0e0",
+              backgroundColor: "#fafafa",
+              "&:before": {
+                content: '"Tips"',
+                position: "absolute",
+                top: -10,
+                left: 12,
+                backgroundColor: "#fafafa",
+                padding: "0 4px",
+                fontSize: 12,
+                color: "#555",
+                fontWeight: 500,
+              },
+            }}
+          >
+            {tips.map((tip, idx) => (
+              <Typography
+                key={idx}
+                sx={{ color: tip.color || "#555", fontSize: 14, lineHeight: 1.4, mb: 0.3 }}
+              >
+                {tip.text}
+              </Typography>
+            ))}
+          </Box>
+        )}
+
+
 
           {showNextStep && storedData.length > 0 && (
             <Box mt={3}>
@@ -386,7 +393,7 @@ export default function BoatUploader() {
               {/* Description */}
               <TextField fullWidth label="Description" multiline rows={5} value={description} onChange={(e) => setDescription(e.target.value)} sx={{ mb: 2 }} />
 
-              {/* Year / Price */}
+              {/* Divider and Year/Price */}
               <Divider sx={{ my: 2 }} />
               <Grid container spacing={2}>
                 <Grid item xs={6}>
@@ -457,7 +464,7 @@ export default function BoatUploader() {
                 </Grid>
               </Grid>
 
-              {/* Rent Price */}
+              {/* Rent Price Section */}
               <Divider sx={{ my: 2 }}>Rent price of boat</Divider>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={3}><TextField label="1 Day" type="number" fullWidth value={rentPriceDay} onChange={(e) => setRentPriceDay(e.target.value)} /></Grid>
