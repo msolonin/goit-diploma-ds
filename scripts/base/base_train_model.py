@@ -65,7 +65,7 @@ def train_base_model(device, dataset, model, target_name, best_model_path):
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), best_model_path)
-            print(f"✅ Saved best model at epoch {epoch+1} with val loss {best_val_loss:.4f}")
+            print(f"Saved best model at epoch {epoch+1} with val loss {best_val_loss:.4f}")
     
     print("\nTraining finished ✅")
     print(f"Best model saved to {best_model_path}")

@@ -93,7 +93,7 @@ def analyze_data(data: str = Query(..., description="JSON string of list of anal
     try:
         data_list = json.loads(data)
         if not isinstance(data_list, list):
-            raise ValueError("Data must be a list")
+            logger.error("Data must be a list")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid data: {e}")
 

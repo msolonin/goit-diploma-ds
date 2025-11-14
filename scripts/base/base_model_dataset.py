@@ -84,6 +84,7 @@ class BoatTypeClassifier(nn.Module):
 # Photo type dataset and Clasifier [in, out, boat]
 # =========================================================
 
+
 class PhotoTypeDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.df = pd.read_csv(csv_file)

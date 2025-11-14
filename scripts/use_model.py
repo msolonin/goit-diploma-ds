@@ -7,6 +7,7 @@ from collections import defaultdict, Counter
 from scripts.base.base_use_model import use_base_model
 from scripts.base.base_model_dataset import  BoatModelClassifier, BoatTypeClassifier, PhotoTypeClassifier
 from scripts.base.constants import BOAT_TYPES, BOAT_TYPE, BOAT_MODEL, PHOTO_TYPE, PHOTO_TYPES_ALL, PHOTO_TYPES, DEFAULT_CSV_PATH, BOAT_CLASS_IN, THRESHOLD, MODEL_THRESHOLD
+from fastapi.logger import logger
 
 
 PHOTO_TYPE_WEIGHTS = {"boat": 1.0, "out": 0.7, "in": 0.3}
@@ -31,9 +32,9 @@ def use_boat_type_model(image_path, gradcam=False, csv_path=DEFAULT_CSV_PATH):
 
 def use_boat_name_model(image_path, model_type,  gradcam=False, csv_path=DEFAULT_CSV_PATH):
     if model_type not in BOAT_TYPES:
-        print(f"❌ Model type shoul be in of {BOAT_TYPES}")
+        logger.error(f"Model type shoul be in of {BOAT_TYPES}")
     else:
-        print(f"✅ Start train model for {model_type} on {DEVICE}")
+        logger.info(f"Start train model for {model_type} on {DEVICE}")
         best_model_path = f"./models/{BOAT_MODEL}_{model_type}_clasifier.pth"
         df = pd.read_csv(csv_path)
         df = df[(df[BOAT_TYPE] == model_type) & (df[PHOTO_TYPE].isin(PHOTO_TYPES))]
@@ -50,14 +51,14 @@ def analyze_photo(image_path,  gradcam=False):
               "model_name": None}
     photo_type, _p, _, debug = use_photo_type_model(image_path, gradcam=gradcam)
     result["photo_type"] = {"target": photo_type, "percent": _p, "top": _, "debug": debug}
-    # print(f"✅ Photo type: {photo_type} | {_p}")
+    logger.info(f"Photo type: {photo_type} | {_p}")
     if photo_type != BOAT_CLASS_IN and _p > THRESHOLD:
         model_type, _p, _, debug = use_boat_type_model(image_path, gradcam=gradcam)
         if _p > THRESHOLD:
             result["model_type"] = {"target": model_type, "percent": _p, "top": _, "debug": debug}
-            # print(f"✅ Model type: {model_type} | {_p}")
+            logger.info(f"Model type: {model_type} | {_p}")
             model_name, _p, _, debug = use_boat_name_model(image_path, model_type, gradcam=gradcam)
-            # print(f"✅ Model name: {model_name} | {_p}")
+            logger.info(f"Model name: {model_name} | {_p}")
             if _p > MODEL_THRESHOLD:
                 result["model_name"] = {"target": model_name, "percent": _p, "top": _, "debug": debug}
     return result

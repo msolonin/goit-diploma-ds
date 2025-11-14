@@ -9,6 +9,10 @@ from PIL import Image
 # import matplotlib.pyplot as plt
 from scripts.base.utils import transform
 from scripts.base.constants import TOP, HEATMAP_FOLDER
+from fastapi.logger import logger
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
 def use_base_model(device, model, classes, best_model_path, image_path, model_name="", gradcam=False):
@@ -43,12 +47,12 @@ def use_base_model(device, model, classes, best_model_path, image_path, model_na
     sorted_result = sorted(result.items(), key=lambda x: x[1], reverse=True)
     top_results = dict(sorted_result[:TOP])
     pred_class, pred_class_procent = sorted_result[0]
-    print(f"\n Image: {image_path}")
-    print(f"Predicted Boat Model: {pred_class}")
-    print(f"Class probabilities (top {str(TOP)}):")
+    logger.info(f"\n Image: {image_path}")
+    logger.info(f"Predicted Boat Model: {pred_class}")
+    logger.info(f"Class probabilities (top {str(TOP)}):")
     # Show top:
     for cls, prob in top_results.items():
-        print(f"   {cls:<25} {prob:>6.2f}%")
+        logger.info(f"   {cls:<25} {prob:>6.2f}%")
     # === Grad-CAM visualization ===
     if gradcam:
         model.zero_grad()
@@ -96,7 +100,5 @@ def use_base_model(device, model, classes, best_model_path, image_path, model_na
         debug_file = f"{new_base_name}{ext}"
         output_path = os.path.join(HEATMAP_FOLDER, debug_file)
         Image.fromarray(overlay).save(output_path)
-
-        print(f"\n✅ Grad-CAM saved: {output_path}")
-
+        logger.info(f"Grad-CAM saved: {output_path}")
     return pred_class, pred_class_procent, top_results, debug_file
