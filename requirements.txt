@@ -79,7 +79,7 @@ torch==2.5.0
 #torchaudio==2.4.1+cu118
 #torchdata==0.8.0
 torchdata==0.10.1
-torchmetrics==1.5.1
+#torchmetrics==1.5.1
 #torchtext==0.18.0
 torchvision==0.19.1
 triton==3.0.0
