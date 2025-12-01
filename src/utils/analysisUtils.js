@@ -191,15 +191,15 @@ export function calculateRentPrice(basePrice, year, season) {
   const age = currentYear - (year || currentYear);
   let ageMultiplier = 1;
   const divider = 5;
-  if (age <= 2) ageMultiplier = 1.2; // very new
-  else if (age <= 5) ageMultiplier = 1.1; // moderately new
-  else if (age <= 10) ageMultiplier = 1; // normal
-  else ageMultiplier = 0.85; // older
+  if (age <= 2) ageMultiplier = 1.2;
+  else if (age <= 5) ageMultiplier = 1.1;
+  else if (age <= 10) ageMultiplier = 1;
+  else ageMultiplier = 0.85;
 
 
-  let dayPrice = basePrice * 0.01 * seasonMultiplier * ageMultiplier; // 1% of boat price per day
-  let weekPrice = dayPrice * 7 * 0.9; // 10% discount for week
-  let monthPrice = dayPrice * 30 * 0.8; // 20% discount for month
+  let dayPrice = basePrice * 0.01 * seasonMultiplier * ageMultiplier;
+  let weekPrice = dayPrice * 7 * 0.9;
+  let monthPrice = dayPrice * 30 * 0.8;
   dayPrice = Math.round(dayPrice / divider);
   weekPrice = Math.round(weekPrice / divider);
   monthPrice = Math.round(monthPrice /divider);
