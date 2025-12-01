@@ -68,8 +68,8 @@ pmdarima==2.0.4
 protobuf==4.25.3
 pyarrow==16.1.0
 python-multipart==0.0.20
-pytorch-forecasting==1.1.1
-pytorch-lightning==2.4.0
+#pytorch-forecasting==1.1.1
+#pytorch-lightning==2.4.0
 PyWavelets==1.6.0
 smmap==5.0.1
 sqlparse==0.5.0
